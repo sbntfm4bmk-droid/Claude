@@ -3,9 +3,13 @@ import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth";
 import { categoriesRouter } from "./routes/categories";
-import { providersRouter } from "./routes/providers";
-import { bookingsRouter } from "./routes/bookings";
+import { businessesRouter } from "./routes/businesses";
+import { servicesRouter } from "./routes/services";
+import { productsRouter } from "./routes/products";
+import { appointmentsRouter } from "./routes/appointments";
+import { ordersRouter } from "./routes/orders";
 import { reviewsRouter } from "./routes/reviews";
+import { favoritesRouter } from "./routes/favorites";
 
 const app = express();
 app.use(cors());
@@ -16,9 +20,13 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.use("/api/auth", authRouter);
 app.use("/api/categories", categoriesRouter);
-app.use("/api/providers", providersRouter);
-app.use("/api/bookings", bookingsRouter);
+app.use("/api/businesses", businessesRouter);
+app.use("/api/services", servicesRouter);
+app.use("/api/products", productsRouter);
+app.use("/api/appointments", appointmentsRouter);
+app.use("/api/orders", ordersRouter);
 app.use("/api/reviews", reviewsRouter);
+app.use("/api/favorites", favoritesRouter);
 
 // Centralized error handler.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

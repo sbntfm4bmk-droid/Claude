@@ -4,150 +4,190 @@ Guidance for AI assistants (and humans) working in this repository.
 
 ## What this is
 
-**ProConnect** (working name) is a mobile marketplace that connects service
-**providers** (tradespeople: plumbers, electricians, cleaners, gardeners, …)
-with **clients** (individuals) who need a service nearby — an "Uber for trades".
+**ProConnect** (working name) is a mobile marketplace for **local commerce and
+services** — an "Uber + Planity + local marketplace" in one app. It connects:
+
+- **Clients** (particuliers) who discover businesses **around them**, **book
+  appointments** (RDV), and **buy products**.
+- **Providers** (professionnels) who run a **storefront** (vitrine) offering
+  **services** booked on time slots and/or **products** sold via orders.
+
+See [`VISION.md`](./VISION.md) for the product strategy and roadmap (this is the
+"why" behind the data model and features).
 
 It is a **monorepo** with two independent applications:
 
 - `mobile/` — React Native + Expo app (TypeScript, expo-router file-based routing).
 - `server/` — Node.js + Express REST API with Prisma ORM over SQLite, JWT auth.
 
-There is **no shared build tooling** between the two; each has its own
-`package.json`, `tsconfig.json`, and `node_modules`. Run commands from inside
-the relevant subdirectory.
+There is **no shared build tooling**; each has its own `package.json`,
+`tsconfig.json`, and `node_modules`. Run commands from inside the relevant subdir.
 
 ## Repository layout
 
 ```
 .
 ├── CLAUDE.md            ← this file
+├── VISION.md            ← product/business strategy
 ├── README.md            ← human-facing setup guide
 ├── server/              ← Express + Prisma backend
 │   ├── prisma/
-│   │   ├── schema.prisma   data model (User, ProviderProfile, Category, Booking, Review)
-│   │   └── seed.ts         demo categories, client + provider accounts
+│   │   ├── schema.prisma   data model (see below)
+│   │   └── seed.ts         demo categories, client + provider storefronts
 │   └── src/
 │       ├── index.ts        Express app entry, route mounting, error handler
-│       ├── lib/            prisma client, JWT helpers, haversine geo distance
+│       ├── lib/            prisma client, JWT helpers, geo distance, slot engine
 │       ├── middleware/     requireAuth / requireRole
-│       └── routes/         auth, categories, providers, bookings, reviews
+│       └── routes/         auth, categories, businesses, services, products,
+│                           appointments, orders, reviews, favorites
 └── mobile/              ← Expo app
     ├── app.json            Expo config (name, apiUrl in expo.extra)
     ├── app/                expo-router routes (see below)
     └── src/
         ├── api/            typed API client (client.ts + index.ts + types.ts)
-        ├── components/     reusable UI (Button, Field, Card, Stars, StatusBadge)
-        ├── constants/      config.ts → APP_NAME, API_URL
-        ├── context/        AuthContext (session, login/register/logout)
-        └── theme/          colors.ts palette
+        ├── components/     ui.tsx design system + BusinessCard
+        ├── constants/      config.ts → APP_NAME, API_URL, radius/coords
+        ├── context/        AuthContext (session) + CartContext (product cart)
+        ├── lib/            format.ts (price/date/duration helpers)
+        └── theme/          colors.ts (palette + gradients) + theme.ts (tokens)
 ```
 
 ### Mobile routing (expo-router)
 
-File-based. `app/_layout.tsx` holds the `AuthProvider` and an `AuthGate` that
+`app/_layout.tsx` holds `AuthProvider` + `CartProvider` and an `AuthGate` that
 redirects between the `(auth)` group and `(tabs)` based on session state.
 
 ```
 app/
-├── _layout.tsx          root stack + auth gating
-├── index.tsx            redirect → /(tabs)
+├── _layout.tsx              root stack + auth gating + providers
+├── index.tsx                redirect → /(tabs)
 ├── (auth)/
 │   ├── login.tsx
-│   └── register.tsx     client OR provider sign-up (role toggle)
+│   └── register.tsx         client OR provider sign-up (role + business type + category)
 ├── (tabs)/
-│   ├── _layout.tsx      bottom tab bar
-│   ├── index.tsx        provider search (filters, distance sort)
-│   ├── bookings.tsx     bookings list + status actions (role-aware)
-│   └── profile.tsx      current user + logout
-├── provider/[id].tsx    provider detail + reviews + "request service"
-└── booking/new.tsx      create a booking (modal)
+│   ├── _layout.tsx          bottom tab bar (Découvrir, Mes RDV, Achats, Profil)
+│   ├── index.tsx            DISCOVER: hero, search, radius selector, categories, "around me"
+│   ├── appointments.tsx     RDV list + status actions (role-aware)
+│   ├── orders.tsx           orders list + cart banner (role-aware)
+│   └── profile.tsx          user, provider storefront card, favorites, logout
+├── business/[id].tsx        STOREFRONT: services to book + products to buy + reviews + favorite
+├── booking/[serviceId].tsx  pick a day + available slot → book appointment (modal)
+├── cart.tsx                 product cart + checkout (modal)
+└── review/[appointmentId].tsx  rate a completed appointment (modal)
 ```
 
 ## Data model (Prisma)
 
-- **User** — `role` is `"CLIENT"` or `"PROVIDER"` (string, not a DB enum — see note).
-- **ProviderProfile** — 1:1 with a provider User; holds bio, hourlyRate, lat/lng,
-  availability, and cached `ratingAvg` / `ratingCount`.
-- **Category** — a trade/métier (slug-unique).
-- **Booking** — a service request; `status` flows
-  `PENDING → ACCEPTED → IN_PROGRESS → COMPLETED`, or `REJECTED` / `CANCELLED`.
-- **Review** — 1:1 with a completed Booking; writing one recomputes the
-  provider's rating aggregates.
+- **User** — `role` is `"CLIENT"` or `"PROVIDER"` (string, not a DB enum).
+- **Business** — 1:1 with a provider User; the storefront. `type` is
+  `"SERVICE" | "PRODUCT" | "BOTH"`. Holds name, tagline, category, lat/lng, city,
+  cover image, and cached `ratingAvg` / `ratingCount`.
+- **Category** — a vertical (coiffure, fleuriste, plomberie…). Has `kind`
+  (`SERVICE`/`PRODUCT`/`BOTH`), an emoji `icon`, and a `color` used in the UI.
+- **Service** — a bookable prestation of a Business (`durationMin`, `price`).
+- **Product** — a purchasable item of a Business (`price`, `stock`).
+- **OpeningHour** — weekly hours (weekday + open/close minutes) that drive slots.
+- **Appointment** — a booked RDV for a Service; `status` flows
+  `PENDING → CONFIRMED → COMPLETED`, or `CANCELLED` / `NO_SHOW`.
+- **Order** + **OrderItem** — a product purchase from one Business; `status`
+  `PENDING → PAID → FULFILLED` or `CANCELLED`; `fulfillment` `PICKUP`/`DELIVERY`.
+- **Review** — 1:1 with a completed Appointment; recomputes the Business rating.
+- **Favorite** — a client's saved Business (`@@unique([userId, businessId])`).
 
-> **SQLite has no native enums.** "Enum-like" fields (`User.role`,
-> `Booking.status`) are stored as `String` with allowed values documented in
-> `schema.prisma` and enforced with Zod in the routes. If you switch the
-> datasource to PostgreSQL, you may convert these to real Prisma enums.
+> **SQLite has no native enums.** "Enum-like" fields are stored as `String` with
+> allowed values documented in `schema.prisma` and enforced with Zod in routes.
+> Switching to PostgreSQL would let you convert these to real Prisma enums.
+
+### Appointment slots
+
+`server/src/lib/slots.ts` generates bookable start times for a service on a given
+day from the business `OpeningHour`s, in 15-min steps, excluding past times and
+slots overlapping existing `PENDING`/`CONFIRMED` appointments. Exposed at
+`GET /api/services/:id/slots?date=YYYY-MM-DD`. Booking re-checks for clashes (409).
+
+## API surface (all under `/api`)
+
+| Group | Endpoints |
+| ----- | --------- |
+| auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
+| categories | `GET /categories` |
+| businesses | `GET /businesses` (filters: `categoryId,type,lat,lng,radiusKm,q`), `GET /businesses/:id`, `PATCH /businesses/me` |
+| services | `POST /services`, `PATCH /services/:id`, `DELETE /services/:id`, `GET /services/:id/slots` |
+| products | `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` |
+| appointments | `POST /appointments`, `GET /appointments`, `PATCH /appointments/:id/status` |
+| orders | `POST /orders`, `GET /orders`, `PATCH /orders/:id/status` |
+| reviews | `POST /reviews` |
+| favorites | `GET /favorites`, `POST /favorites/toggle` |
 
 ## Development workflows
 
 ### Backend (`cd server`)
 
-| Command                 | What it does                                         |
-| ----------------------- | ---------------------------------------------------- |
-| `npm install`           | install deps                                         |
-| `npm run db:push`       | apply `schema.prisma` to the SQLite db (no migration files) |
-| `npm run prisma:migrate`| create a versioned migration instead                 |
-| `npm run db:seed`       | load demo data (idempotent, uses upserts)            |
-| `npm run dev`           | hot-reloading dev server (ts-node-dev) on `:4000`    |
-| `npm run build`         | compile TypeScript to `dist/`                        |
-| `npm run lint`          | `tsc --noEmit` type check                            |
+| Command | What it does |
+| ------- | ------------ |
+| `npm install` | install deps |
+| `npm run db:push` | apply `schema.prisma` to SQLite (no migration files) |
+| `npm run db:seed` | load demo data (idempotent) |
+| `npm run dev` | hot-reloading dev server on `:4000` |
+| `npm run build` | compile TypeScript to `dist/` |
+| `npm run lint` | `tsc --noEmit` type check |
 
-After editing `schema.prisma`, run `npm run db:push` (or `prisma:migrate`) **and**
-regenerate the client with `npm run prisma:generate` if types look stale.
+After editing `schema.prisma`, run `npm run db:push` then `npm run prisma:generate`
+if types look stale.
 
 ### Mobile (`cd mobile`)
 
-| Command          | What it does                              |
-| ---------------- | ----------------------------------------- |
-| `npm install`    | install deps                              |
-| `npm start`      | Expo dev server / QR for Expo Go          |
-| `npm run ios`    | open iOS simulator                        |
-| `npm run android`| open Android emulator                     |
-| `npm run lint`   | `tsc --noEmit` type check                 |
+| Command | What it does |
+| ------- | ------------ |
+| `npm install` | install deps |
+| `npm start` | Expo dev server / QR for Expo Go |
+| `npm run ios` / `npm run android` | open a simulator/emulator |
+| `npm run lint` | `tsc --noEmit` type check |
 
-The app's API base URL comes from `app.json → expo.extra.apiUrl`, read in
-`src/constants/config.ts`. On a physical device, change `localhost` to the
-host machine's LAN IP.
+API base URL comes from `app.json → expo.extra.apiUrl`, read in
+`src/constants/config.ts`. On a physical device, change `localhost` to the host's
+LAN IP.
 
 ## Conventions
 
-- **Language**: TypeScript everywhere, `strict` mode on in both projects.
-- **UI copy is in French** (the product's target audience); **code, comments,
-  identifiers, and commit messages are in English**. Keep this split.
-- **Validation**: every write endpoint validates its body with **Zod** before
-  touching the database. Add new endpoints the same way.
-- **Auth**: protected routes use the `requireAuth` middleware; `req.user`
-  (`{ userId, role }`) is populated from the JWT. Never trust a client-sent role.
-- **Passwords** are hashed with bcrypt; the hash is stripped via `sanitize()`
-  before any user object leaves the API.
-- **API client**: the mobile app never calls `fetch` directly in screens — it
-  goes through `src/api/index.ts` (grouped as `authApi`, `providersApi`,
-  `bookingsApi`, etc.), which uses the `apiFetch` wrapper for auth + errors.
-- **Styling**: React Native `StyleSheet` with the shared palette in
-  `src/theme/colors.ts`. Reuse the components in `src/components/ui.tsx` rather
-  than re-styling buttons/inputs/cards ad hoc.
-- **No icon library**: tab/inline icons use emoji to avoid an extra dependency.
-- **App name** is centralized in `mobile/src/constants/config.ts` (`APP_NAME`);
-  don't hardcode the product name in screens.
+- **Language**: TypeScript everywhere, `strict` mode on. **UI copy in French**;
+  **code, comments, identifiers, commit messages in English**.
+- **Validation**: every write endpoint validates its body with **Zod**.
+- **Auth**: protected routes use `requireAuth`; `req.user` (`{ userId, role }`)
+  comes from the JWT. Never trust a client-sent role. Ownership is re-checked
+  server-side (e.g. only a business owner can edit its services).
+- **Passwords**: bcrypt-hashed; stripped via `sanitize()` before leaving the API.
+- **API client**: screens never call `fetch` directly — they go through
+  `src/api/index.ts` (`authApi`, `businessesApi`, `servicesApi`, `appointmentsApi`,
+  `ordersApi`, `favoritesApi`, …) over the `apiFetch` wrapper.
+- **Design system**: use tokens in `src/theme/theme.ts` (spacing/radius/font/shadow)
+  and `colors.ts` (palette + gradients). Reuse components in
+  `src/components/ui.tsx` (`Button`, `Field`, `Card`, `Stars`, `Avatar`, `Chip`,
+  `Badge`, `SectionHeader`, `Skeleton`) instead of ad-hoc styling.
+- **Gradients/haptics**: via `expo-linear-gradient` and `expo-haptics`.
+- **No icon library**: icons are emoji (categories carry their own `icon`).
+- **App name** is centralized in `mobile/src/constants/config.ts` (`APP_NAME`).
+- **Cart** holds products from a single Business at a time (`CartContext`).
 
 ## Conventions to keep when extending
 
-- New backend route → create `src/routes/<name>.ts`, export a `Router`, mount it
-  in `src/index.ts` under `/api/<name>`, validate input with Zod.
-- New mobile API call → add a method to the relevant group in `src/api/index.ts`
-  and a matching type in `src/api/types.ts` (kept in sync with Prisma models).
-- New screen → add a file under `app/`; respect the `(auth)` vs `(tabs)`
-  grouping and the auth-gating in `app/_layout.tsx`.
+- New backend route → `src/routes/<name>.ts`, export a `Router`, mount under
+  `/api/<name>` in `src/index.ts`, validate with Zod, re-check ownership.
+- New mobile API call → add to the right group in `src/api/index.ts` and a type
+  in `src/api/types.ts` (kept in sync with Prisma models).
+- New screen → add under `app/`, respect `(auth)` vs `(tabs)` grouping and the
+  auth-gating in `app/_layout.tsx`.
 
 ## Known gaps / not yet implemented
 
-These are intentionally out of scope for the current scaffold — flag them rather
-than assuming they exist:
+Intentionally out of scope for the current scaffold — flag them, don't assume:
 
-- No real-time updates (no websockets/push); booking lists refresh on focus/pull.
-- No payments, no in-app chat, no map view (distance is computed, not rendered).
-- No automated tests yet; `npm run lint` (type-check) is the only gate.
-- No image upload; `avatarUrl` exists in the model but isn't populated.
-- SQLite + JWT secret in `.env` are dev defaults — not production-hardened.
+- **No real payment** — orders/appointments have statuses but no Stripe/charge yet.
+- No deposit / no-show charge, no cancellation policy enforcement.
+- No real-time/push notifications; lists refresh on focus/pull.
+- No in-app chat, no map rendering (distance is computed, not drawn).
+- No image upload; `coverImageUrl`/`imageUrl` exist but aren't populated (UI uses
+  category-colored gradients instead).
+- No provider-side catalog editor screen yet (services/products created via API/seed).
+- No automated tests; `npm run lint` (type-check) is the only gate.
+- SQLite + dev JWT secret — not production-hardened.

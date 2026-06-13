@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#1E2A78"
+      "backgroundColor": "#5B21B6"
     },
     "ios": {
       "supportsTablet": true,

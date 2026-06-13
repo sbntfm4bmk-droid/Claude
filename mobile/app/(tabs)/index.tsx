@@ -1,32 +1,51 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { categoriesApi, providersApi } from "../../src/api";
-import type { Category, ProviderProfile } from "../../src/api/types";
-import { Card, Stars } from "../../src/components/ui";
-import { colors } from "../../src/theme/colors";
+import { businessesApi, categoriesApi } from "../../src/api";
+import type { Business, BusinessType, Category } from "../../src/api/types";
+import { useAuth } from "../../src/context/AuthContext";
+import { BusinessCard } from "../../src/components/BusinessCard";
+import { Skeleton } from "../../src/components/ui";
+import { colors, gradients } from "../../src/theme/colors";
+import { radius, spacing } from "../../src/theme/theme";
+import {
+  APP_NAME,
+  DEFAULT_RADIUS_KM,
+  FALLBACK_COORDS,
+  RADIUS_STEPS,
+} from "../../src/constants/config";
 
-export default function SearchScreen() {
+const TYPE_FILTERS: { label: string; value?: BusinessType }[] = [
+  { label: "Tout", value: undefined },
+  { label: "Sur RDV", value: "SERVICE" },
+  { label: "Boutiques", value: "PRODUCT" },
+];
+
+export default function DiscoverScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | undefined>();
+  const [typeFilter, setTypeFilter] = useState<BusinessType | undefined>();
+  const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
   const [query, setQuery] = useState("");
-  const [providers, setProviders] = useState<ProviderProfile[]>([]);
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState(FALLBACK_COORDS);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Ask for location once so we can sort providers by distance.
   useEffect(() => {
     (async () => {
       try {
@@ -36,7 +55,7 @@ export default function SearchScreen() {
           setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         }
       } catch {
-        // Location is optional; ignore failures.
+        // Keep fallback coords.
       }
     })();
     categoriesApi.list().then((r) => setCategories(r.categories)).catch(() => {});
@@ -44,130 +63,177 @@ export default function SearchScreen() {
 
   const load = useCallback(async () => {
     try {
-      const r = await providersApi.list({
+      const r = await businessesApi.list({
         categoryId: selectedCat,
-        lat: coords?.lat,
-        lng: coords?.lng,
+        type: typeFilter,
+        lat: coords.lat,
+        lng: coords.lng,
+        radiusKm,
         q: query.trim() || undefined,
       });
-      setProviders(r.providers);
+      setBusinesses(r.businesses);
     } catch {
-      setProviders([]);
+      setBusinesses([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedCat, coords, query]);
+  }, [selectedCat, typeFilter, coords, radiusKm, query]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  const firstName = user?.fullName?.split(" ")[0] ?? "";
+
   return (
-    <View style={styles.container}>
-      <View style={styles.searchBar}>
-        <Text style={{ fontSize: 18 }}>🔍</Text>
-        <TextInput
-          placeholder="Rechercher un prestataire..."
-          placeholderTextColor={colors.textMuted}
-          value={query}
-          onChangeText={setQuery}
-          onSubmitEditing={load}
-          style={styles.searchInput}
-        />
-      </View>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Hero header */}
+      <LinearGradient colors={gradients.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+        <SafeAreaView edges={["top"]}>
+          <Text style={styles.heroHi}>Bonjour {firstName} 👋</Text>
+          <Text style={styles.heroTitle}>Que cherchez-vous{"\n"}aujourd'hui ?</Text>
 
-      {/* Category filter chips */}
-      <View style={{ height: 48 }}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={[{ id: "all", name: "Tous", slug: "all", icon: "" } as Category, ...categories]}
-          keyExtractor={(c) => c.id}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
-          renderItem={({ item }) => {
-            const active = item.id === "all" ? !selectedCat : selectedCat === item.id;
-            return (
-              <Pressable
-                onPress={() => setSelectedCat(item.id === "all" ? undefined : item.id)}
-                style={[styles.chip, active && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{item.name}</Text>
-              </Pressable>
-            );
-          }}
-        />
-      </View>
-
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
-      ) : (
-        <FlatList
-          data={providers}
-          keyExtractor={(p) => p.id}
-          contentContainerStyle={{ padding: 16 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                load();
-              }}
+          <View style={styles.searchBar}>
+            <Text style={{ fontSize: 17 }}>🔍</Text>
+            <TextInput
+              placeholder={`Coiffeur, fleuriste, plombier...`}
+              placeholderTextColor={colors.textFaint}
+              value={query}
+              onChangeText={setQuery}
+              onSubmitEditing={load}
+              returnKeyType="search"
+              style={styles.searchInput}
             />
-          }
-          ListEmptyComponent={
-            <Text style={styles.empty}>Aucun prestataire trouvé pour ce filtre.</Text>
-          }
-          renderItem={({ item }) => (
-            <Pressable onPress={() => router.push(`/provider/${item.id}`)}>
-              <Card>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name}>{item.user?.fullName}</Text>
-                    <Text style={styles.cat}>{item.category?.name ?? "Service"}</Text>
-                    <Stars value={item.ratingAvg} count={item.ratingCount} />
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.price}>{item.hourlyRate}€/h</Text>
-                    {item.distanceKm != null && (
-                      <Text style={styles.distance}>{item.distanceKm.toFixed(1)} km</Text>
-                    )}
-                  </View>
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      <FlatList
+        data={loading ? [] : businesses}
+        keyExtractor={(b) => b.id}
+        contentContainerStyle={{ padding: spacing.lg, paddingTop: spacing.md }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+          />
+        }
+        ListHeaderComponent={
+          <View>
+            {/* Radius selector */}
+            <View style={styles.radiusRow}>
+              <Text style={styles.radiusLabel}>📍 Autour de moi · {radiusKm} km</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.md }}>
+              {RADIUS_STEPS.map((r) => (
+                <Pressable
+                  key={r}
+                  onPress={() => setRadiusKm(r)}
+                  style={[styles.radiusChip, radiusKm === r && styles.radiusChipActive]}
+                >
+                  <Text style={[styles.radiusChipText, radiusKm === r && { color: "#fff" }]}>{r} km</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            {/* Type filter */}
+            <View style={styles.typeRow}>
+              {TYPE_FILTERS.map((t) => (
+                <Pressable
+                  key={t.label}
+                  onPress={() => setTypeFilter(t.value)}
+                  style={[styles.typeBtn, typeFilter === t.value && styles.typeBtnActive]}
+                >
+                  <Text style={[styles.typeText, typeFilter === t.value && { color: "#fff" }]}>{t.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Categories */}
+            <Text style={styles.catTitle}>Catégories</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: spacing.sm }}>
+              {categories.map((c) => {
+                const active = selectedCat === c.id;
+                return (
+                  <Pressable key={c.id} onPress={() => setSelectedCat(active ? undefined : c.id)} style={styles.catItem}>
+                    <View style={[styles.catIcon, { backgroundColor: c.color + "1A", borderColor: active ? c.color : "transparent" }]}>
+                      <Text style={{ fontSize: 26 }}>{c.icon}</Text>
+                    </View>
+                    <Text style={[styles.catName, active && { color: c.color, fontWeight: "700" }]} numberOfLines={1}>
+                      {c.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            <Text style={styles.resultsTitle}>
+              {businesses.length} résultat{businesses.length > 1 ? "s" : ""} près de vous
+            </Text>
+          </View>
+        }
+        ListEmptyComponent={
+          loading ? (
+            <View style={{ gap: spacing.lg }}>
+              {[0, 1, 2].map((i) => (
+                <View key={i} style={{ gap: 8 }}>
+                  <Skeleton height={92} style={{ borderRadius: radius.lg }} />
+                  <Skeleton height={14} width="60%" />
+                  <Skeleton height={12} width="40%" />
                 </View>
-                {item.bio ? <Text style={styles.bio} numberOfLines={2}>{item.bio}</Text> : null}
-              </Card>
-            </Pressable>
-          )}
-        />
-      )}
+              ))}
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Text style={{ fontSize: 40 }}>🗺️</Text>
+              <Text style={styles.emptyTitle}>Personne dans ce rayon</Text>
+              <Text style={styles.emptyText}>Élargissez le rayon ou changez de filtre.</Text>
+            </View>
+          )
+        }
+        renderItem={({ item }) => (
+          <BusinessCard business={item} onPress={() => router.push(`/business/${item.id}`)} />
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingTop: 12 },
+  hero: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
+  heroHi: { color: "rgba(255,255,255,0.85)", fontSize: 15, fontWeight: "600", marginTop: spacing.sm },
+  heroTitle: { color: "#fff", fontSize: 26, fontWeight: "800", marginTop: 4, letterSpacing: -0.5 },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: colors.surface,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
+    gap: 10,
+    backgroundColor: "#fff",
+    marginTop: spacing.lg,
+    paddingHorizontal: 16,
+    height: 52,
+    borderRadius: radius.lg,
   },
   searchInput: { flex: 1, fontSize: 16, color: colors.text },
-  chip: { paddingHorizontal: 16, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: "center" },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { color: colors.text, fontSize: 14 },
-  chipTextActive: { color: "#fff", fontWeight: "600" },
-  name: { fontSize: 17, fontWeight: "700", color: colors.text },
-  cat: { fontSize: 13, color: colors.accent, marginBottom: 4, fontWeight: "500" },
-  price: { fontSize: 16, fontWeight: "700", color: colors.primary },
-  distance: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  bio: { fontSize: 13, color: colors.textMuted, marginTop: 8 },
-  empty: { textAlign: "center", color: colors.textMuted, marginTop: 40 },
+  radiusRow: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  radiusLabel: { fontSize: 15, fontWeight: "700", color: colors.text },
+  radiusChip: { paddingHorizontal: 14, height: 34, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, justifyContent: "center" },
+  radiusChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  radiusChipText: { fontSize: 13, fontWeight: "700", color: colors.textMuted },
+  typeRow: { flexDirection: "row", gap: 8, marginBottom: spacing.sm },
+  typeBtn: { flex: 1, height: 40, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  typeBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  typeText: { fontWeight: "700", color: colors.textMuted, fontSize: 14 },
+  catTitle: { fontSize: 19, fontWeight: "800", color: colors.text, marginTop: spacing.md, letterSpacing: -0.3 },
+  catItem: { alignItems: "center", width: 76 },
+  catIcon: { width: 64, height: 64, borderRadius: radius.lg, alignItems: "center", justifyContent: "center", borderWidth: 2, marginBottom: 6 },
+  catName: { fontSize: 12, color: colors.textMuted, textAlign: "center" },
+  resultsTitle: { fontSize: 19, fontWeight: "800", color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md, letterSpacing: -0.3 },
+  empty: { alignItems: "center", paddingVertical: 60, gap: 8 },
+  emptyTitle: { fontSize: 17, fontWeight: "700", color: colors.text },
+  emptyText: { fontSize: 14, color: colors.textMuted, textAlign: "center" },
 });

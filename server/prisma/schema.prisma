@@ -1,6 +1,13 @@
-// Prisma schema for ProConnect
-// SQLite is used for zero-config local dev. SQLite has no native enum support,
-// so "enum-like" fields are stored as String with allowed values documented inline.
+// Prisma schema for ProConnect — a local commerce & services marketplace.
+//
+// Two-sided model:
+//   - CLIENT (particulier) discovers businesses nearby, books appointments,
+//     and buys products.
+//   - PROVIDER owns a Business that offers SERVICEs (booked on time slots)
+//     and/or PRODUCTs (purchased via orders).
+//
+// SQLite has no native enums, so "enum-like" fields are stored as String with
+// allowed values documented inline and enforced with Zod in the routes.
 
 generator client {
   provider = "prisma-client-js"
@@ -11,8 +18,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// A user of the platform. Role distinguishes a client (particulier) from a
-// service provider (prestataire). A provider also has a ProviderProfile.
+// A platform user. role: "CLIENT" | "PROVIDER".
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -20,82 +26,176 @@ model User {
   fullName  String
   phone     String?
   avatarUrl String?
-  // Allowed values: "CLIENT" | "PROVIDER"
   role      String   @default("CLIENT")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  providerProfile ProviderProfile?
-  bookingsAsClient Booking[]       @relation("ClientBookings")
-  reviewsWritten   Review[]        @relation("ReviewAuthor")
+  business     Business?     // 1:1 when role === "PROVIDER"
+  appointments Appointment[] @relation("ClientAppointments")
+  orders       Order[]       @relation("ClientOrders")
+  reviews      Review[]      @relation("ReviewAuthor")
+  favorites    Favorite[]
 }
 
-// Extra information for users who offer services.
-model ProviderProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bio         String?
-  hourlyRate  Float    @default(0)
-  // Current location, used to sort providers by distance.
-  latitude    Float?
-  longitude   Float?
-  isAvailable Boolean  @default(true)
-  ratingAvg   Float    @default(0)
-  ratingCount Int      @default(0)
+// A professional's storefront (vitrine).
+model Business {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  // What the business offers: "SERVICE" | "PRODUCT" | "BOTH".
+  type        String  @default("SERVICE")
+  tagline     String?
+  description String?
   categoryId  String?
   category    Category? @relation(fields: [categoryId], references: [id])
+  // Location for "around me" discovery.
+  addressLine String?
+  city        String?
+  latitude    Float?
+  longitude   Float?
+  coverImageUrl String?
+  logoUrl       String?
+  // Cached rating aggregates.
+  ratingAvg   Float   @default(0)
+  ratingCount Int     @default(0)
+  isActive    Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  bookings Booking[] @relation("ProviderBookings")
-  reviews  Review[]  @relation("ProviderReviews")
+  services     Service[]
+  products     Product[]
+  openingHours OpeningHour[]
+  appointments Appointment[]
+  orders       Order[]
+  reviews      Review[]
+  favorites    Favorite[]
 }
 
-// A trade / metier (plumber, electrician, cleaner, ...).
+// A trade/metier or product category. kind narrows where it applies.
 model Category {
   id    String @id @default(cuid())
   name  String
   slug  String @unique
-  icon  String @default("briefcase")
+  icon  String @default("✨")
+  color String @default("#1E2A78")
+  // "SERVICE" | "PRODUCT" | "BOTH"
+  kind  String @default("BOTH")
 
-  providers ProviderProfile[]
-  bookings  Booking[]
+  businesses Business[]
 }
 
-// A service request from a client to a provider.
-model Booking {
-  id          String   @id @default(cuid())
-  clientId    String
-  client      User     @relation("ClientBookings", fields: [clientId], references: [id])
-  providerId  String
-  provider    ProviderProfile @relation("ProviderBookings", fields: [providerId], references: [id])
-  categoryId  String?
-  category    Category? @relation(fields: [categoryId], references: [id])
-  description String
-  address     String?
-  latitude    Float?
-  longitude   Float?
-  scheduledAt DateTime?
-  priceEstimate Float?
-  // Allowed values: PENDING | ACCEPTED | REJECTED | IN_PROGRESS | COMPLETED | CANCELLED
-  status      String   @default("PENDING")
+// A bookable prestation offered by a SERVICE/BOTH business.
+model Service {
+  id          String  @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  durationMin Int     @default(60)
+  price       Float   @default(0)
+  isActive    Boolean @default(true)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+}
+
+// A purchasable product offered by a PRODUCT/BOTH business.
+model Product {
+  id          String  @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  price       Float   @default(0)
+  stock       Int     @default(0)
+  imageUrl    String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  orderItems OrderItem[]
+}
+
+// Weekly opening hours used to generate appointment slots.
+// weekday: 0 (Sunday) .. 6 (Saturday). Minutes since midnight.
+model OpeningHour {
+  id         String @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  weekday    Int
+  openMinute Int
+  closeMinute Int
+}
+
+// A booked appointment (RDV) for a Service.
+model Appointment {
+  id             String   @id @default(cuid())
+  businessId     String
+  business       Business @relation(fields: [businessId], references: [id])
+  serviceId      String
+  service        Service  @relation(fields: [serviceId], references: [id])
+  clientId       String
+  client         User     @relation("ClientAppointments", fields: [clientId], references: [id])
+  startAt        DateTime
+  endAt          DateTime
+  // "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW"
+  status         String   @default("PENDING")
+  priceAtBooking Float    @default(0)
+  notes          String?
+  createdAt      DateTime @default(now())
 
   review Review?
 }
 
-// A review left by a client after a completed booking.
+// A product order (panier validé).
+model Order {
+  id          String   @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id])
+  clientId    String
+  client      User     @relation("ClientOrders", fields: [clientId], references: [id])
+  // "PENDING" | "PAID" | "FULFILLED" | "CANCELLED"
+  status      String   @default("PENDING")
+  // "PICKUP" | "DELIVERY"
+  fulfillment String   @default("PICKUP")
+  total       Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  items OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int     @default(1)
+  unitPrice Float   @default(0)
+}
+
+// A review left after a completed appointment or order.
 model Review {
+  id            String   @id @default(cuid())
+  businessId    String
+  business      Business @relation(fields: [businessId], references: [id])
+  authorId      String
+  author        User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  rating        Int
+  comment       String?
+  appointmentId String?  @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+// A client's saved/favorited business.
+model Favorite {
   id         String   @id @default(cuid())
-  bookingId  String   @unique
-  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  authorId   String
-  author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
-  providerId String
-  provider   ProviderProfile @relation("ProviderReviews", fields: [providerId], references: [id])
-  rating     Int
-  comment    String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+
+  @@unique([userId, businessId])
 }

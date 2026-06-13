@@ -4,6 +4,7 @@ import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { CartProvider } from "../src/context/CartContext";
 import { colors } from "../src/theme/colors";
 
 // Redirects between the auth flow and the main app based on session state.
@@ -34,8 +35,10 @@ function AuthGate() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="provider/[id]" options={{ headerShown: true, title: "Prestataire" }} />
-      <Stack.Screen name="booking/new" options={{ headerShown: true, title: "Demander un service", presentation: "modal" }} />
+      <Stack.Screen name="business/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="booking/[serviceId]" options={{ headerShown: true, title: "Choisir un créneau", presentation: "modal" }} />
+      <Stack.Screen name="cart" options={{ headerShown: true, title: "Mon panier", presentation: "modal" }} />
+      <Stack.Screen name="review/[appointmentId]" options={{ headerShown: true, title: "Laisser un avis", presentation: "modal" }} />
     </Stack>
   );
 }
@@ -44,8 +47,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="dark" />
-        <AuthGate />
+        <CartProvider>
+          <StatusBar style="dark" />
+          <AuthGate />
+        </CartProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

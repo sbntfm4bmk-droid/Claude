@@ -1,10 +1,17 @@
 import { apiFetch } from "./client";
 import type {
+  Appointment,
+  AppointmentStatus,
   AuthResponse,
-  Booking,
-  BookingStatus,
+  Business,
+  BusinessType,
   Category,
-  ProviderProfile,
+  Favorite,
+  Order,
+  OrderStatus,
+  Product,
+  Service,
+  Slot,
   User,
 } from "./types";
 
@@ -16,9 +23,10 @@ export const authApi = {
     fullName: string;
     phone?: string;
     role?: "CLIENT" | "PROVIDER";
+    businessName?: string;
+    businessType?: BusinessType;
     categoryId?: string;
-    hourlyRate?: number;
-    bio?: string;
+    city?: string;
   }) => apiFetch<AuthResponse>("/api/auth/register", { method: "POST", body }),
 
   login: (body: { email: string; password: string }) =>
@@ -32,44 +40,72 @@ export const categoriesApi = {
   list: () => apiFetch<{ categories: Category[] }>("/api/categories"),
 };
 
-// ---- Providers ----
-export const providersApi = {
-  list: (params: { categoryId?: string; lat?: number; lng?: number; q?: string } = {}) => {
+// ---- Businesses (discovery + storefront) ----
+export const businessesApi = {
+  list: (params: {
+    categoryId?: string;
+    type?: BusinessType;
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    q?: string;
+  } = {}) => {
     const qs = new URLSearchParams();
-    if (params.categoryId) qs.set("categoryId", params.categoryId);
-    if (params.lat != null) qs.set("lat", String(params.lat));
-    if (params.lng != null) qs.set("lng", String(params.lng));
-    if (params.q) qs.set("q", params.q);
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== "") qs.set(k, String(v));
+    });
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    return apiFetch<{ providers: ProviderProfile[] }>(`/api/providers${suffix}`);
+    return apiFetch<{ businesses: Business[] }>(`/api/businesses${suffix}`);
   },
 
-  get: (id: string) => apiFetch<{ provider: ProviderProfile }>(`/api/providers/${id}`),
+  get: (id: string) => apiFetch<{ business: Business }>(`/api/businesses/${id}`),
 
-  updateMe: (body: Partial<ProviderProfile>) =>
-    apiFetch<{ provider: ProviderProfile }>("/api/providers/me", {
+  updateMe: (body: Partial<Business>) =>
+    apiFetch<{ business: Business }>("/api/businesses/me", { method: "PATCH", body, auth: true }),
+};
+
+// ---- Services ----
+export const servicesApi = {
+  create: (body: { name: string; description?: string; durationMin: number; price: number }) =>
+    apiFetch<{ service: Service }>("/api/services", { method: "POST", body, auth: true }),
+
+  slots: (serviceId: string, date: string) =>
+    apiFetch<{ slots: Slot[]; durationMin: number }>(`/api/services/${serviceId}/slots?date=${date}`),
+};
+
+// ---- Products ----
+export const productsApi = {
+  create: (body: { name: string; description?: string; price: number; stock: number }) =>
+    apiFetch<{ product: Product }>("/api/products", { method: "POST", body, auth: true }),
+};
+
+// ---- Appointments (RDV) ----
+export const appointmentsApi = {
+  create: (body: { serviceId: string; startAt: string; notes?: string }) =>
+    apiFetch<{ appointment: Appointment }>("/api/appointments", { method: "POST", body, auth: true }),
+
+  list: () => apiFetch<{ appointments: Appointment[] }>("/api/appointments", { auth: true }),
+
+  updateStatus: (id: string, status: AppointmentStatus) =>
+    apiFetch<{ appointment: Appointment }>(`/api/appointments/${id}/status`, {
       method: "PATCH",
-      body,
+      body: { status },
       auth: true,
     }),
 };
 
-// ---- Bookings ----
-export const bookingsApi = {
+// ---- Orders ----
+export const ordersApi = {
   create: (body: {
-    providerId: string;
-    categoryId?: string;
-    description: string;
-    address?: string;
-    latitude?: number;
-    longitude?: number;
-    scheduledAt?: string;
-  }) => apiFetch<{ booking: Booking }>("/api/bookings", { method: "POST", body, auth: true }),
+    businessId: string;
+    fulfillment: "PICKUP" | "DELIVERY";
+    items: { productId: string; quantity: number }[];
+  }) => apiFetch<{ order: Order }>("/api/orders", { method: "POST", body, auth: true }),
 
-  list: () => apiFetch<{ bookings: Booking[] }>("/api/bookings", { auth: true }),
+  list: () => apiFetch<{ orders: Order[] }>("/api/orders", { auth: true }),
 
-  updateStatus: (id: string, status: BookingStatus) =>
-    apiFetch<{ booking: Booking }>(`/api/bookings/${id}/status`, {
+  updateStatus: (id: string, status: OrderStatus) =>
+    apiFetch<{ order: Order }>(`/api/orders/${id}/status`, {
       method: "PATCH",
       body: { status },
       auth: true,
@@ -78,6 +114,17 @@ export const bookingsApi = {
 
 // ---- Reviews ----
 export const reviewsApi = {
-  create: (body: { bookingId: string; rating: number; comment?: string }) =>
+  create: (body: { appointmentId: string; rating: number; comment?: string }) =>
     apiFetch<{ review: unknown }>("/api/reviews", { method: "POST", body, auth: true }),
+};
+
+// ---- Favorites ----
+export const favoritesApi = {
+  list: () => apiFetch<{ favorites: Favorite[] }>("/api/favorites", { auth: true }),
+  toggle: (businessId: string) =>
+    apiFetch<{ favorited: boolean }>("/api/favorites/toggle", {
+      method: "POST",
+      body: { businessId },
+      auth: true,
+    }),
 };

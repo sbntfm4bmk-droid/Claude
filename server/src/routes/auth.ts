@@ -13,10 +13,11 @@ const registerSchema = z.object({
   fullName: z.string().min(1),
   phone: z.string().optional(),
   role: z.enum(["CLIENT", "PROVIDER"]).default("CLIENT"),
-  // Optional provider fields, only used when role === "PROVIDER".
+  // Optional business fields, only used when role === "PROVIDER".
+  businessName: z.string().optional(),
+  businessType: z.enum(["SERVICE", "PRODUCT", "BOTH"]).optional(),
   categoryId: z.string().optional(),
-  hourlyRate: z.number().optional(),
-  bio: z.string().optional(),
+  city: z.string().optional(),
 });
 
 // POST /api/auth/register
@@ -40,18 +41,27 @@ authRouter.post("/register", async (req, res) => {
       fullName: data.fullName,
       phone: data.phone,
       role: data.role,
-      providerProfile:
+      business:
         data.role === "PROVIDER"
           ? {
               create: {
+                name: data.businessName || data.fullName,
+                type: data.businessType ?? "SERVICE",
                 categoryId: data.categoryId,
-                hourlyRate: data.hourlyRate ?? 0,
-                bio: data.bio,
+                city: data.city,
+                // Default opening hours: Mon–Sat, 9:00–18:00.
+                openingHours: {
+                  create: [1, 2, 3, 4, 5, 6].map((weekday) => ({
+                    weekday,
+                    openMinute: 9 * 60,
+                    closeMinute: 18 * 60,
+                  })),
+                },
               },
             }
           : undefined,
     },
-    include: { providerProfile: true },
+    include: { business: { include: { category: true } } },
   });
 
   const token = signToken({ userId: user.id, role: user.role });
@@ -73,7 +83,7 @@ authRouter.post("/login", async (req, res) => {
 
   const user = await prisma.user.findUnique({
     where: { email },
-    include: { providerProfile: true },
+    include: { business: { include: { category: true } } },
   });
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
@@ -88,7 +98,7 @@ authRouter.post("/login", async (req, res) => {
 authRouter.get("/me", requireAuth, async (req, res) => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
-    include: { providerProfile: { include: { category: true } } },
+    include: { business: { include: { category: true } } },
   });
   if (!user) return res.status(404).json({ error: "User not found" });
   return res.json({ user: sanitize(user) });
