@@ -1,0 +1,101 @@
+// Prisma schema for ProConnect
+// SQLite is used for zero-config local dev. SQLite has no native enum support,
+// so "enum-like" fields are stored as String with allowed values documented inline.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A user of the platform. Role distinguishes a client (particulier) from a
+// service provider (prestataire). A provider also has a ProviderProfile.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  fullName  String
+  phone     String?
+  avatarUrl String?
+  // Allowed values: "CLIENT" | "PROVIDER"
+  role      String   @default("CLIENT")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  providerProfile ProviderProfile?
+  bookingsAsClient Booking[]       @relation("ClientBookings")
+  reviewsWritten   Review[]        @relation("ReviewAuthor")
+}
+
+// Extra information for users who offer services.
+model ProviderProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio         String?
+  hourlyRate  Float    @default(0)
+  // Current location, used to sort providers by distance.
+  latitude    Float?
+  longitude   Float?
+  isAvailable Boolean  @default(true)
+  ratingAvg   Float    @default(0)
+  ratingCount Int      @default(0)
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings Booking[] @relation("ProviderBookings")
+  reviews  Review[]  @relation("ProviderReviews")
+}
+
+// A trade / metier (plumber, electrician, cleaner, ...).
+model Category {
+  id    String @id @default(cuid())
+  name  String
+  slug  String @unique
+  icon  String @default("briefcase")
+
+  providers ProviderProfile[]
+  bookings  Booking[]
+}
+
+// A service request from a client to a provider.
+model Booking {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      User     @relation("ClientBookings", fields: [clientId], references: [id])
+  providerId  String
+  provider    ProviderProfile @relation("ProviderBookings", fields: [providerId], references: [id])
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  description String
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  scheduledAt DateTime?
+  priceEstimate Float?
+  // Allowed values: PENDING | ACCEPTED | REJECTED | IN_PROGRESS | COMPLETED | CANCELLED
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  review Review?
+}
+
+// A review left by a client after a completed booking.
+model Review {
+  id         String   @id @default(cuid())
+  bookingId  String   @unique
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  providerId String
+  provider   ProviderProfile @relation("ProviderReviews", fields: [providerId], references: [id])
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+}

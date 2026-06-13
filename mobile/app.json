@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "ProConnect",
+    "slug": "proconnect",
+    "scheme": "proconnect",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1E2A78"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "ProConnect utilise votre position pour trouver les prestataires proches de vous."
+      }
+    },
+    "android": {
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "plugins": ["expo-router", "expo-location"],
+    "extra": {
+      "apiUrl": "http://localhost:4000"
+    }
+  }
+}
