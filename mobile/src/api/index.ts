@@ -60,6 +60,8 @@ export const businessesApi = {
 
   get: (id: string) => apiFetch<{ business: Business }>(`/api/businesses/${id}`),
 
+  catalog: () => apiFetch<{ business: Business }>("/api/businesses/me/catalog", { auth: true }),
+
   updateMe: (body: Partial<Business>) =>
     apiFetch<{ business: Business }>("/api/businesses/me", { method: "PATCH", body, auth: true }),
 };
@@ -69,6 +71,11 @@ export const servicesApi = {
   create: (body: { name: string; description?: string; durationMin: number; price: number }) =>
     apiFetch<{ service: Service }>("/api/services", { method: "POST", body, auth: true }),
 
+  update: (id: string, body: Partial<{ name: string; description?: string; durationMin: number; price: number; isActive: boolean }>) =>
+    apiFetch<{ service: Service }>(`/api/services/${id}`, { method: "PATCH", body, auth: true }),
+
+  remove: (id: string) => apiFetch<{ ok: boolean }>(`/api/services/${id}`, { method: "DELETE", auth: true }),
+
   slots: (serviceId: string, date: string) =>
     apiFetch<{ slots: Slot[]; durationMin: number }>(`/api/services/${serviceId}/slots?date=${date}`),
 };
@@ -77,6 +84,26 @@ export const servicesApi = {
 export const productsApi = {
   create: (body: { name: string; description?: string; price: number; stock: number }) =>
     apiFetch<{ product: Product }>("/api/products", { method: "POST", body, auth: true }),
+
+  update: (id: string, body: Partial<{ name: string; description?: string; price: number; stock: number; isActive: boolean }>) =>
+    apiFetch<{ product: Product }>(`/api/products/${id}`, { method: "PATCH", body, auth: true }),
+
+  remove: (id: string) => apiFetch<{ ok: boolean }>(`/api/products/${id}`, { method: "DELETE", auth: true }),
+};
+
+// ---- Payments ----
+export const paymentsApi = {
+  config: () => apiFetch<{ live: boolean }>("/api/payments/config"),
+
+  payOrder: (orderId: string) =>
+    apiFetch<{ order: Order; paid: boolean }>(`/api/payments/order/${orderId}`, { method: "POST", auth: true }),
+
+  payDeposit: (appointmentId: string) =>
+    apiFetch<{ appointment: Appointment; paid: boolean; skipped?: boolean }>("/api/payments/deposit", {
+      method: "POST",
+      body: { appointmentId },
+      auth: true,
+    }),
 };
 
 // ---- Appointments (RDV) ----

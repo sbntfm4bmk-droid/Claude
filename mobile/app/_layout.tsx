@@ -39,6 +39,9 @@ function AuthGate() {
       <Stack.Screen name="booking/[serviceId]" options={{ headerShown: true, title: "Choisir un créneau", presentation: "modal" }} />
       <Stack.Screen name="cart" options={{ headerShown: true, title: "Mon panier", presentation: "modal" }} />
       <Stack.Screen name="review/[appointmentId]" options={{ headerShown: true, title: "Laisser un avis", presentation: "modal" }} />
+      <Stack.Screen name="manage/catalog" options={{ headerShown: true, title: "Gérer ma vitrine" }} />
+      <Stack.Screen name="manage/service" options={{ headerShown: true, title: "Prestation", presentation: "modal" }} />
+      <Stack.Screen name="manage/product" options={{ headerShown: true, title: "Produit", presentation: "modal" }} />
     </Stack>
   );
 }

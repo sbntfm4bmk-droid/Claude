@@ -71,6 +71,12 @@ npm start            # Expo Dev Tools / QR pour Expo Go
   des horaires d'ouverture), confirmation, cycle de vie du RDV.
 - **Achat de produits** : panier (par commerçant), checkout retrait/livraison,
   décrément de stock, suivi de commande.
+- **Paiement** : paiement de la commande et **acompte de RDV** (30%, anti no-show)
+  via une couche PSP abstraite — PSP simulé en dev, **Stripe** en production
+  (renseigner `STRIPE_SECRET_KEY`, voir `server/src/lib/payments.ts`).
+- **Espace pro** : éditeur de vitrine (créer / modifier / supprimer prestations
+  et produits) depuis le profil.
+- **Rappels de RDV** : notification locale ~1h avant le rendez-vous.
 - **Avis & notes** : après un RDV terminé, recalcul de la note de la vitrine.
 - **Design** : design system premium (dégradés, ombres douces, skeletons, haptique).
 

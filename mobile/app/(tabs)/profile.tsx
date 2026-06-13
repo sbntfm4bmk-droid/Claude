@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { favoritesApi } from "../../src/api";
 import type { Favorite } from "../../src/api/types";
 import { useAuth } from "../../src/context/AuthContext";
@@ -12,6 +13,7 @@ import { businessTypeLabel } from "../../src/lib/format";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [favorites, setFavorites] = useState<Favorite[]>([]);
 
   useEffect(() => {
@@ -41,9 +43,10 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>Ma vitrine</Text>
             <Text style={styles.bizName}>{business.name}</Text>
             <Text style={styles.bizMeta}>{businessTypeLabel(business.type)}{business.category ? ` · ${business.category.name}` : ""}</Text>
-            <View style={{ marginTop: 6 }}>
+            <View style={{ marginTop: 6, marginBottom: spacing.md }}>
               <Stars value={business.ratingAvg} count={business.ratingCount} size={15} />
             </View>
+            <Button title="🛠  Gérer ma vitrine" small variant="secondary" onPress={() => router.push("/manage/catalog")} />
           </Card>
         )}
 

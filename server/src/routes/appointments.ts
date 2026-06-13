@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
+import { depositFor } from "../lib/payments";
 
 export const appointmentsRouter = Router();
 
@@ -44,6 +45,7 @@ appointmentsRouter.post("/", requireAuth, async (req, res) => {
       startAt: start,
       endAt: end,
       priceAtBooking: service.price,
+      depositAmount: depositFor(service.price),
       notes,
       status: "PENDING",
     },

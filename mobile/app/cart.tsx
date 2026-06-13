@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { ordersApi } from "../src/api";
+import { ordersApi, paymentsApi } from "../src/api";
 import { useCart } from "../src/context/CartContext";
 import { Button, Card } from "../src/components/ui";
 import { colors } from "../src/theme/colors";
@@ -18,17 +18,19 @@ export default function CartScreen() {
     if (!cart.businessId || cart.lines.length === 0) return;
     setPlacing(true);
     try {
-      await ordersApi.create({
+      // Create the order, then pay it (simulated PSP unless Stripe is configured).
+      const { order } = await ordersApi.create({
         businessId: cart.businessId,
         fulfillment,
         items: cart.lines.map((l) => ({ productId: l.product.id, quantity: l.quantity })),
       });
+      await paymentsApi.payOrder(order.id);
       cart.clear();
-      Alert.alert("Commande passée 🎉", "Le commerçant a reçu votre commande.", [
+      Alert.alert("Paiement confirmé 🎉", "Votre commande est payée et envoyée au commerçant.", [
         { text: "Voir mes achats", onPress: () => router.replace("/(tabs)/orders") },
       ]);
     } catch (e) {
-      Alert.alert("Commande impossible", e instanceof Error ? e.message : "Réessayez.");
+      Alert.alert("Paiement impossible", e instanceof Error ? e.message : "Réessayez.");
     } finally {
       setPlacing(false);
     }
@@ -89,7 +91,7 @@ export default function CartScreen() {
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>{formatPrice(cart.total)}</Text>
         </View>
-        <Button title="Commander" onPress={checkout} loading={placing} />
+        <Button title={`Payer ${formatPrice(cart.total)}`} onPress={checkout} loading={placing} />
       </View>
     </View>
   );

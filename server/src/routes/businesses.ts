@@ -53,6 +53,20 @@ businessesRouter.get("/", async (req, res) => {
   res.json({ businesses: result });
 });
 
+// GET /api/businesses/me/catalog — the provider's own services & products
+// (including inactive ones) for the management screen.
+businessesRouter.get("/me/catalog", requireAuth, async (req, res) => {
+  const business = await prisma.business.findUnique({
+    where: { userId: req.user!.userId },
+    include: {
+      services: { orderBy: { createdAt: "desc" } },
+      products: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!business) return res.status(404).json({ error: "No business for this user" });
+  res.json({ business });
+});
+
 // GET /api/businesses/:id — full storefront with services, products, reviews.
 businessesRouter.get("/:id", async (req, res) => {
   const business = await prisma.business.findUnique({

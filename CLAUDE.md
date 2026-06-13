@@ -71,9 +71,13 @@ app/
 │   ├── orders.tsx           orders list + cart banner (role-aware)
 │   └── profile.tsx          user, provider storefront card, favorites, logout
 ├── business/[id].tsx        STOREFRONT: services to book + products to buy + reviews + favorite
-├── booking/[serviceId].tsx  pick a day + available slot → book appointment (modal)
-├── cart.tsx                 product cart + checkout (modal)
-└── review/[appointmentId].tsx  rate a completed appointment (modal)
+├── booking/[serviceId].tsx  pick a day + available slot → book + pay deposit (modal)
+├── cart.tsx                 product cart + checkout + payment (modal)
+├── review/[appointmentId].tsx  rate a completed appointment (modal)
+└── manage/                  provider-only catalog editor
+    ├── catalog.tsx          list/add/edit/delete own services & products
+    ├── service.tsx          create/edit a service (modal)
+    └── product.tsx          create/edit a product (modal)
 ```
 
 ## Data model (Prisma)
@@ -111,13 +115,14 @@ slots overlapping existing `PENDING`/`CONFIRMED` appointments. Exposed at
 | ----- | --------- |
 | auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
 | categories | `GET /categories` |
-| businesses | `GET /businesses` (filters: `categoryId,type,lat,lng,radiusKm,q`), `GET /businesses/:id`, `PATCH /businesses/me` |
+| businesses | `GET /businesses` (filters: `categoryId,type,lat,lng,radiusKm,q`), `GET /businesses/:id`, `GET /businesses/me/catalog`, `PATCH /businesses/me` |
 | services | `POST /services`, `PATCH /services/:id`, `DELETE /services/:id`, `GET /services/:id/slots` |
 | products | `POST /products`, `PATCH /products/:id`, `DELETE /products/:id` |
 | appointments | `POST /appointments`, `GET /appointments`, `PATCH /appointments/:id/status` |
 | orders | `POST /orders`, `GET /orders`, `PATCH /orders/:id/status` |
 | reviews | `POST /reviews` |
 | favorites | `GET /favorites`, `POST /favorites/toggle` |
+| payments | `GET /payments/config`, `POST /payments/order/:id`, `POST /payments/deposit` |
 
 ## Development workflows
 
@@ -182,12 +187,16 @@ LAN IP.
 
 Intentionally out of scope for the current scaffold — flag them, don't assume:
 
-- **No real payment** — orders/appointments have statuses but no Stripe/charge yet.
-- No deposit / no-show charge, no cancellation policy enforcement.
-- No real-time/push notifications; lists refresh on focus/pull.
+- **Payments are simulated.** `src/lib/payments.ts` is a PSP abstraction: it uses
+  the mock provider (instant success) unless `STRIPE_SECRET_KEY` is set. Order
+  checkout and the appointment **deposit** (30% to fight no-shows) run through it
+  end-to-end. Going live = drop a real Stripe PaymentIntent into `charge()`; the
+  rest of the app is unchanged. No refund flow / cancellation-policy enforcement yet.
+- **Reminders are local-only.** `src/lib/notifications.ts` schedules an on-device
+  notification ~1h before an appointment (best-effort, Expo Go has limits). No
+  server-side push / SMS / email yet.
 - No in-app chat, no map rendering (distance is computed, not drawn).
 - No image upload; `coverImageUrl`/`imageUrl` exist but aren't populated (UI uses
   category-colored gradients instead).
-- No provider-side catalog editor screen yet (services/products created via API/seed).
 - No automated tests; `npm run lint` (type-check) is the only gate.
 - SQLite + dev JWT secret — not production-hardened.

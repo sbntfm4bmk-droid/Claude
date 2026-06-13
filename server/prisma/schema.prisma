@@ -141,10 +141,14 @@ model Appointment {
   // "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "NO_SHOW"
   status         String   @default("PENDING")
   priceAtBooking Float    @default(0)
+  // Deposit taken to secure the slot / fight no-shows.
+  depositAmount  Float    @default(0)
+  depositPaid    Boolean  @default(false)
   notes          String?
   createdAt      DateTime @default(now())
 
-  review Review?
+  review  Review?
+  payment Payment?
 }
 
 // A product order (panier validé).
@@ -159,9 +163,11 @@ model Order {
   // "PICKUP" | "DELIVERY"
   fulfillment String   @default("PICKUP")
   total       Float    @default(0)
+  paidAt      DateTime?
   createdAt   DateTime @default(now())
 
-  items OrderItem[]
+  items   OrderItem[]
+  payment Payment?
 }
 
 model OrderItem {
@@ -198,4 +204,22 @@ model Favorite {
   createdAt  DateTime @default(now())
 
   @@unique([userId, businessId])
+}
+
+// A payment ledger entry. Backed by a real PSP (Stripe) when configured,
+// otherwise a simulated provider (see src/lib/payments.ts).
+model Payment {
+  id          String   @id @default(cuid())
+  // "ORDER" | "DEPOSIT"
+  kind        String
+  amount      Float
+  // "PENDING" | "SUCCEEDED" | "REFUNDED" | "FAILED"
+  status      String   @default("PENDING")
+  provider    String   @default("mock")
+  providerRef String?
+  orderId       String?      @unique
+  order         Order?       @relation(fields: [orderId], references: [id])
+  appointmentId String?      @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  createdAt   DateTime @default(now())
 }

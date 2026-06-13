@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { appointmentsApi, servicesApi } from "../../src/api";
+import { appointmentsApi, paymentsApi, servicesApi } from "../../src/api";
 import type { Slot } from "../../src/api/types";
 import { Button, Card, Skeleton } from "../../src/components/ui";
 import { colors } from "../../src/theme/colors";
 import { radius, spacing } from "../../src/theme/theme";
 import { formatDay, formatDuration, formatPrice, formatTime } from "../../src/lib/format";
+import { scheduleAppointmentReminder } from "../../src/lib/notifications";
+
+// Default deposit policy mirrors the server (30% of the price).
+function depositFor(price: number): number {
+  if (price <= 0) return 0;
+  return Math.max(1, Math.round(price * 0.3));
+}
 
 // Build the next 14 selectable days.
 function nextDays(n: number): Date[] {
@@ -52,12 +59,37 @@ export default function BookingScreen() {
       .finally(() => setLoadingSlots(false));
   }, [params.serviceId, selectedDay]);
 
+  const price = Number(params.price ?? 0);
+  const deposit = depositFor(price);
+
   async function confirm() {
     if (!selectedSlot || !params.serviceId) return;
     setBooking(true);
     try {
-      await appointmentsApi.create({ serviceId: params.serviceId, startAt: selectedSlot });
-      Alert.alert("RDV demandé ✅", "Votre demande a été envoyée au professionnel.", [
+      const { appointment } = await appointmentsApi.create({
+        serviceId: params.serviceId,
+        startAt: selectedSlot,
+      });
+
+      // Take the deposit to secure the slot (simulated unless Stripe is live).
+      let depositMsg = "";
+      if (appointment.depositAmount > 0) {
+        try {
+          await paymentsApi.payDeposit(appointment.id);
+          depositMsg = `\n\nAcompte de ${formatPrice(appointment.depositAmount)} réglé pour sécuriser le créneau.`;
+        } catch {
+          depositMsg = "";
+        }
+      }
+
+      // Schedule a local reminder ~1h before (best-effort).
+      scheduleAppointmentReminder({
+        startAt: appointment.startAt,
+        businessName: params.businessName,
+        serviceName: params.name,
+      });
+
+      Alert.alert("RDV confirmé ✅", `Votre demande a été envoyée au professionnel.${depositMsg}`, [
         { text: "Voir mes RDV", onPress: () => router.replace("/(tabs)/appointments") },
       ]);
     } catch (e) {
@@ -76,8 +108,11 @@ export default function BookingScreen() {
           <Text style={styles.svcName}>{params.name ?? "Prestation"}</Text>
           {params.businessName ? <Text style={styles.svcBiz}>{params.businessName}</Text> : null}
           <Text style={styles.svcMeta}>
-            ⏱ {formatDuration(Number(params.duration ?? 60))} · {formatPrice(Number(params.price ?? 0))}
+            ⏱ {formatDuration(Number(params.duration ?? 60))} · {formatPrice(price)}
           </Text>
+          {deposit > 0 ? (
+            <Text style={styles.deposit}>🔒 Acompte de {formatPrice(deposit)} pour réserver</Text>
+          ) : null}
         </Card>
 
         <Text style={styles.label}>Choisissez un jour</Text>
@@ -135,6 +170,7 @@ const styles = StyleSheet.create({
   svcName: { fontSize: 20, fontWeight: "800", color: colors.text },
   svcBiz: { fontSize: 14, color: colors.textMuted, marginTop: 2 },
   svcMeta: { fontSize: 14, color: colors.primary, fontWeight: "600", marginTop: spacing.sm },
+  deposit: { fontSize: 13, color: colors.textMuted, marginTop: 6 },
   label: { fontSize: 16, fontWeight: "700", color: colors.text, marginTop: spacing.xl, marginBottom: spacing.sm },
   dayChip: { paddingHorizontal: 16, height: 44, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border, justifyContent: "center" },
   dayChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },

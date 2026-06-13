@@ -106,6 +106,8 @@ export interface Appointment {
   endAt: string;
   status: AppointmentStatus;
   priceAtBooking: number;
+  depositAmount: number;
+  depositPaid: boolean;
   notes?: string | null;
   createdAt: string;
   service?: Service;
@@ -131,6 +133,7 @@ export interface Order {
   status: OrderStatus;
   fulfillment: "PICKUP" | "DELIVERY";
   total: number;
+  paidAt?: string | null;
   createdAt: string;
   items?: OrderItem[];
   client?: Pick<User, "id" | "fullName" | "phone">;

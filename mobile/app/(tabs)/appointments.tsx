@@ -71,6 +71,9 @@ export default function AppointmentsScreen() {
             <Text style={styles.when}>🗓 {formatDateTime(item.startAt)}</Text>
             <Text style={styles.party}>{isProvider ? "👤 " : "🏬 "}{other}</Text>
             <Text style={styles.price}>{formatPrice(item.priceAtBooking)}</Text>
+            {item.depositPaid && item.depositAmount > 0 ? (
+              <Text style={styles.deposit}>🔒 Acompte de {formatPrice(item.depositAmount)} réglé</Text>
+            ) : null}
 
             {/* Provider actions */}
             {isProvider && item.status === "PENDING" && (
@@ -108,7 +111,8 @@ const styles = StyleSheet.create({
   svc: { fontSize: 17, fontWeight: "800", color: colors.text, flex: 1 },
   when: { fontSize: 14, color: colors.text, fontWeight: "600", marginBottom: 4 },
   party: { fontSize: 14, color: colors.textMuted, marginBottom: 4 },
-  price: { fontSize: 14, color: colors.primary, fontWeight: "700", marginBottom: 8 },
+  price: { fontSize: 14, color: colors.primary, fontWeight: "700", marginBottom: 4 },
+  deposit: { fontSize: 12, color: colors.success, fontWeight: "600", marginBottom: 8 },
   actions: { flexDirection: "row", gap: 10 },
   reviewed: { fontSize: 13, color: colors.success, fontWeight: "600", marginTop: 4 },
   empty: { alignItems: "center", paddingVertical: 80, gap: 8 },

@@ -10,6 +10,7 @@ import { appointmentsRouter } from "./routes/appointments";
 import { ordersRouter } from "./routes/orders";
 import { reviewsRouter } from "./routes/reviews";
 import { favoritesRouter } from "./routes/favorites";
+import { paymentsRouter } from "./routes/payments";
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,7 @@ app.use("/api/appointments", appointmentsRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/favorites", favoritesRouter);
+app.use("/api/payments", paymentsRouter);
 
 // Centralized error handler.
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
